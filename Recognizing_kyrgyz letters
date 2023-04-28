@@ -1,0 +1,105 @@
+#Data is taken from https://www.kaggle.com/competitions/kyrgyz-language-hand-written-letter-recognition/submissions
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Load the CSV file into a pandas DataFrame
+df = pd.read_csv('/content/drive/MyDrive/Kyrgyz_letters/train.csv')
+
+# Extract the label column
+labels = df['label']
+
+# Extract the image data as a numpy array
+images = df.iloc[:, 1:].values.reshape(-1, 50, 50)
+
+# Display the letters from rows 450 to 419 as images
+fig, axs = plt.subplots(4, 8, figsize=(16, 8))
+axs = axs.flatten()
+for i in range(32):
+    axs[i].imshow(images[50450-i], cmap='gray')
+    axs[i].set_title(f'Label: {labels[50450-i]}')
+    axs[i].axis('off')
+plt.show()
+
+import pandas as pd
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, BatchNormalization, Dropout, Flatten, Dense, MaxPooling2D
+from sklearn.model_selection import train_test_split, KFold
+
+# Load the data
+df = pd.read_csv('/content/drive/MyDrive/Kyrgyz_letters/train.csv')
+
+# Subtract 1 from the label values to make them range from 0 to 35
+df['label'] -= 1
+
+# Split the data into training and testing sets
+X = df.drop('label', axis=1).values.reshape(-1, 50, 50, 1) / 255.0
+y = tf.keras.utils.to_categorical(df['label'].values, num_classes=36)
+
+# Define the CNN architecture
+input_size = (50, 50, 1)
+output_size = 36
+
+model = Sequential()
+model.add(Conv2D(64, kernel_size=1, activation='relu', input_shape=input_size))
+model.add(BatchNormalization())
+model.add(Conv2D(64, kernel_size=1, activation='relu'))
+model.add(BatchNormalization())
+model.add(MaxPooling2D(pool_size=(2, 2)))
+model.add(Dropout(0.2))
+
+model.add(Conv2D(128, kernel_size=2, activation='relu'))
+model.add(BatchNormalization())
+model.add(Conv2D(128, kernel_size=2, activation='relu'))
+model.add(BatchNormalization())
+model.add(MaxPooling2D(pool_size=(2, 2)))
+model.add(Dropout(0.2))
+
+model.add(Conv2D(256, kernel_size=2, activation='relu'))
+model.add(BatchNormalization())
+model.add(Conv2D(256, kernel_size=2, activation='relu'))
+model.add(BatchNormalization())
+model.add(MaxPooling2D(pool_size=(2, 2)))
+model.add(Dropout(0.2))
+
+model.add(Flatten())
+model.add(Dense(512, activation='relu'))
+model.add(BatchNormalization())
+model.add(Dropout(0.2))
+model.add(Dense(output_size, activation='softmax'))
+
+# Define the number of folds for cross-validation
+num_folds = 3
+
+# Use KFold to generate cross-validation folds
+kf = KFold(n_splits=num_folds, shuffle=True)
+
+# Train and evaluate the model using cross-validation
+fold_idx = 1
+test_acc_list = []
+for train_index, test_index in kf.split(X):
+    print(f'Fold {fold_idx}')
+
+    # Split the data into training and testing sets for this fold
+    X_train, X_test = X[train_index], X[test_index]
+    y_train, y_test = y[train_index], y[test_index]
+
+    # Compile the model
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+    # Train the model on this fold
+    history = model.fit(X_train, y_train, epochs=15, batch_size=32, validation_data=(X_test, y_test))
+
+    # Evaluate the model on the test set for this fold
+    test_loss, test_acc = model.evaluate(X_test, y_test)
+    test_acc_list.append(test_acc)
+    print(f'Test accuracy for fold {fold_idx}: {test_acc}')
+
+    fold_idx += 1
+
+# Calculate and print the mean and standard deviation of the test accuracies
+test_acc_mean = np.mean(test_acc_list)
+test_acc_std = np.std(test_acc_list)
+print(f'\nMean test accuracy: {test_acc_mean:.4f} (std: {test_acc_std:.4f})')
